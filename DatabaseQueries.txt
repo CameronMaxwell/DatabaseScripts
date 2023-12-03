@@ -1,0 +1,197 @@
+-- Cameron Maxwell 
+-- Part 1 SQL Updates
+SELECT * FROM course;
+SELECT * FROM courseoffer;
+SELECT * FROM hasworkedon;
+SELECT * FROM hates;
+SELECT * FROM loves;
+SELECT * FROM ta;
+
+UPDATE course
+SET coursename = 'Multimedia and Communications'
+WHERE coursename = 'Multimedia';
+
+UPDATE hasworkedon
+SET hours = 200
+WHERE tauserid IN (
+    SELECT tauserid
+    FROM ta
+    WHERE firstname LIKE 'R%'
+);
+
+SELECT * FROM course;
+SELECT * FROM hasworkedon;
+
+
+-- Part 2 SQL Inserts
+
+INSERT INTO course (coursenum, coursename, level, year)
+VALUES ('CS2208', 'Computer Architecture', 2, 1969);
+
+INSERT INTO courseoffer (coid, numstudent, term, year, whichcourse)
+VALUES ('RD20', 280, 'Spring', 2024, 'CS2208'),
+       ('RD21', 300, 'Fall', 2023, 'CS2208'),
+       ('RD22', 270, 'Spring', 2024, 'CS2208');
+
+INSERT INTO ta (tauserid, firstname, lastname, studentnum, degreetype)
+VALUES ('sdogg', 'Snoop', 'Dogg', 251000420, 'Masters');
+
+INSERT INTO loves (ltauserid, lcoursenum)
+VALUES ('sdogg', 'CS2208');
+
+SELECT * FROM course;
+SELECT * FROM courseoffer;
+SELECT * FROM ta;
+SELECT * FROM loves;
+
+
+
+-- Part 3 SQL Queries
+ 
+-- Query 1
+SELECT lastname FROM ta;
+
+-- Query 2
+SELECT DISTINCT lastname FROM ta;
+
+-- Query 3
+SELECT * FROM ta ORDER BY firstname;
+
+-- Query 4
+SELECT firstname, lastname, tauserid
+FROM ta
+WHERE degreetype = 'Masters';
+
+-- Query 5 
+SELECT co.coid, co.term, co.year, c.coursenum
+FROM courseoffer co
+JOIN course c ON co.whichcourse = c.coursenum
+WHERE c.coursename LIKE '%Databases%';
+
+-- Query 6
+SELECT c.*, co.*
+FROM course c
+LEFT JOIN courseoffer co ON c.coursenum = co.whichcourse
+WHERE c.year > co.year;
+
+-- Query 7
+SELECT c.coursenum, c.coursename
+FROM course c
+WHERE c.coursenum IN (SELECT lcoursenum FROM loves WHERE ltauserid IN (SELECT tauserid FROM ta WHERE lastname = 'Geller'));
+
+-- Query 8 
+SELECT SUM(co.numstudent) AS total_students, c.coursename, c.coursenum
+FROM courseoffer co
+JOIN course c ON co.whichcourse = c.coursenum
+WHERE c.coursenum = 'CS1033';
+
+-- Query 9
+SELECT DISTINCT t.firstname, t.lastname, c.coursenum
+FROM ta t
+JOIN hasworkedon h ON t.tauserid = h.tauserid
+JOIN courseoffer co ON h.coid = co.coid
+JOIN course c ON co.whichcourse = c.coursenum
+WHERE c.level = 1;
+
+-- Query 10 
+CREATE OR REPLACE VIEW total_hours_per_ta AS
+SELECT h.tauserid, co.coid, SUM(h.hours) AS total_hours
+FROM hasworkedon h
+JOIN courseoffer co ON h.coid = co.coid
+GROUP BY h.tauserid, co.coid;
+
+SELECT t.firstname, t.lastname, th.coid AS course_offering_id, th.total_hours AS max_hours
+FROM ta t
+JOIN total_hours_per_ta th ON t.tauserid = th.tauserid
+WHERE th.total_hours = (SELECT MAX(total_hours) FROM total_hours_per_ta WHERE coid = th.coid)
+ORDER BY th.coid;
+
+-- Query 11 (There is no course thats neither loved or hated)
+SELECT c.coursenum, c.coursename
+FROM course c
+WHERE c.coursenum NOT IN (
+    SELECT lcoursenum FROM loves
+    UNION
+    SELECT hcoursenum FROM hates
+);
+
+-- Query 12 
+SELECT t.lastname, t.firstname, COUNT(h.coid) AS courseOfferingsTaught
+FROM ta t
+JOIN hasworkedon h ON t.tauserid = h.tauserid
+GROUP BY t.tauserid, t.lastname, t.firstname
+HAVING COUNT(h.coid) > 1;
+
+-- Query 13 
+SELECT DISTINCT ta.firstname, ta.lastname, course.coursenum, course.coursename 
+FROM ta 
+JOIN hasworkedon ON ta.tauserid = hasworkedon.tauserid 
+JOIN courseoffer ON hasworkedon.coid = courseoffer.coid 
+JOIN course ON courseoffer.whichcourse = course.coursenum 
+JOIN loves ON ta.tauserid = loves.ltauserid AND course.coursenum = loves.lcoursenum;
+
+-- Query 14
+CREATE OR REPLACE VIEW fall_course_counts AS
+SELECT c.coursenum, c.coursename, COUNT(co.coid) AS offering_count
+FROM courseoffer co
+JOIN course c ON co.whichcourse = c.coursenum
+WHERE co.term = 'Fall'
+GROUP BY c.coursenum, c.coursename;
+
+SELECT coursenum, coursename, offering_count
+FROM fall_course_counts
+WHERE offering_count = (SELECT MAX(offering_count) FROM fall_course_counts);
+
+-- Query 15 Display the course offer id, term, year, and course number of all courses that TAs have NOT worked on yet.
+SELECT co.coid AS course_offering_id, co.term, co.year, co.whichcourse AS course_number
+FROM courseoffer co
+LEFT JOIN hasworkedon h ON co.coid = h.coid
+WHERE h.coid IS NULL;
+
+
+
+-- Part 4 SQL Views/Deletes
+
+-- Create a view to list TAs, their user IDs, and the courses they hate in alphabetical order by course level
+CREATE VIEW coursesTaHates AS
+SELECT t.firstname, t.lastname, t.tauserid, h.hcoursenum AS course_number, c.coursename AS course_name
+FROM ta t
+JOIN hates h ON t.tauserid = h.htauserid
+JOIN course c ON h.hcoursenum = c.coursenum
+ORDER BY c.level;
+
+SELECT * FROM coursesTaHates;
+
+-- Query to show the first and last name and course number of TAs who have to work on courses they hate
+SELECT DISTINCT h.tauserid, t.firstname, t.lastname, co.coid AS courseoffering_id, co.whichcourse AS course_number
+FROM coursesTaHates h
+JOIN courseoffer co ON h.course_number = co.whichcourse
+JOIN ta t ON h.tauserid = t.tauserid
+LEFT JOIN hasworkedon w ON w.tauserid = h.tauserid AND w.coid = co.coid
+WHERE h.course_number IN (SELECT hcoursenum FROM hates WHERE h.tauserid = hates.htauserid) AND w.tauserid IS NOT NULL;
+
+SELECT * FROM ta;
+SELECT * FROM hates;
+
+-- Delete the TA with the userid of pbing
+DELETE FROM ta WHERE tauserid = 'pbing';
+
+SELECT * FROM ta;
+SELECT * FROM hates;
+
+-- Try to delete the TA with the userid of mgeller
+DELETE FROM ta WHERE tauserid = 'mgeller';
+-- The TA mgeller is referenced in the loves and hasworkedon tables, so the DELETE command fails.
+
+-- Alter the ta table to add an image column 
+ALTER TABLE ta ADD COLUMN image VARCHAR(200);
+
+SELECT * FROM ta;
+
+-- Update the image column 
+UPDATE ta
+SET image = 'https://i.pinimg.com/originals/bf/85/8d/bf858d262ce992754e2b78042c9e0fe8.gif'
+WHERE tauserid = 'mgeller';
+
+
+SELECT * FROM ta;
